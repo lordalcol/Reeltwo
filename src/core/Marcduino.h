@@ -52,6 +52,7 @@ public:
                 }
             }
         }
+        Console.printf("Command: %s found=%d\n", cmd, found);
         // Check for unprocess Jawa lite command
         if (!found && *cmd == '@')
         {

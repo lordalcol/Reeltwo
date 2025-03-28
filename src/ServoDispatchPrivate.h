@@ -296,20 +296,20 @@ public:
     virtual ~ServoDispatchESP32()
     {
         if (attached())
-            ledcDetachPin(fPin);
+            ledcDetach(fPin);
         deallocate();
     }
 
     void detachPin(int pin)
     {
-        ledcDetachPin(pin);
+        ledcDetach(pin);
         deallocate();
     }
-    
+
     void attachPin(uint8_t pin, double freq, uint8_t resolution_bits = 10)
     {
         if (validPWM(pin))
-           setup(freq, resolution_bits);
+            setup(freq, resolution_bits);
         attachPin(pin);
     }
 
@@ -318,10 +318,17 @@ public:
         return fAttached;
     }
 
-    void write(uint32_t duty)
-    {
+    void write(uint32_t duty) {
         fDuty = duty;
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+        ledcWrite(getPin(), duty);
+#else
         ledcWrite(getChannel(), duty);
+#endif
+#else
+        ledcWrite(getChannel(), duty);
+#endif
     }
 
     void writeScaled(float duty)
@@ -411,13 +418,13 @@ public:
 
     static bool validPWM(int pin)
     {
-    #ifdef CONFIG_IDF_TARGET_ESP32
+#ifdef CONFIG_IDF_TARGET_ESP32
         // Datasheet https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf,
         // Pinout    https://docs.espressif.com/projects/esp-idf/en/latest/esp32/_images/esp32-devkitC-v4-pinout.jpg
         return (pin == 2 || pin == 4 || pin == 5) ||
                (pin >= 12 && pin <= 19) || (pin >= 21 && pin <= 23) ||
                (pin >= 25 && pin <= 27) || (pin == 32 || pin == 33);
-    #elif CONFIG_IDF_TARGET_ESP32S2
+#elif CONFIG_IDF_TARGET_ESP32S2
         // Datasheet https://www.espressif.com/sites/default/files/documentation/esp32-s2_datasheet_en.pdf,
         // Pinout    https://docs.espressif.com/projects/esp-idf/en/latest/esp32s2/_images/esp32-s2_saola1-pinout.jpg
         return (pin >= 1 && pin <= 21) || (pin >= 33 && pin <= 44);
@@ -442,7 +449,7 @@ public:
     #else
         #error Unsupported ESP32 platform
         return false;
-    #endif
+#endif
     }
 
     static int channelsRemaining()
@@ -462,12 +469,21 @@ private:
     static inline float mapf(float x, float in_min, float in_max, float out_min, float out_max)
     {
         return (x > in_max) ? out_max : (x < in_min) ? out_min :
-                (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+                                        (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
     }
 
-    static double _ledcSetupTimerFreq(uint8_t chan, double freq, uint8_t bit_num)
-    {
-        return ledcSetup(chan, freq, bit_num);
+    static double _ledcSetupTimerFreq(uint8_t pin, double freq, uint8_t bit_num) {
+
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+        DEBUG_PRINTF("Trying0 to attach pin %d freq %d res %d\n", pin, freq, bit_num);
+        return ledcAttach(pin, freq, bit_num);
+#else
+        return ledcSetup(pin, freq, bit_num);
+#endif
+#else
+        return ledcSetup(pin, freq, bit_num);
+#endif
     }
 
     void attach(int pin)
@@ -476,21 +492,35 @@ private:
         fAttached = true;
     }
 
-    void adjustFrequencyLocal(double freq, float dutyScaled)
-    {
+    void adjustFrequencyLocal(double freq, double dutyScaled) {
         privates()->timerFreqSet[getTimer()] = (long) freq;
         fFreq = freq;
-        if (attached())
-        {
-            ledcDetachPin(fPin);
+        if (attached()) {
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+            ledcDetach(fPin);
             // Remove the PWM during frequency adjust
-            _ledcSetupTimerFreq(getChannel(), freq, fResolutionBits);
+            _ledcSetupTimerFreq(fPin, freq, fResolutionBits);
             writeScaled(dutyScaled);
-            ledcAttachPin(fPin, getChannel()); // re-attach the pin after frequency adjust
-        }
-        else
-        {
-            _ledcSetupTimerFreq(getChannel(), freq, fResolutionBits);
+            DEBUG_PRINTF("Trying2 to attach pin %d freq %d res %d\n", fPin, freq, fResolutionBits);
+            ledcAttach(fPin, freq, fResolutionBits); // re-attach the pin after frequency adjust
+#else
+            ledcDetachPin(fPin);
+		// Remove the PWM during frequency adjust
+		_ledcSetupTimerFreq(getChannel(), freq, fResolutionBits);
+		writeScaled(dutyScaled);
+		ledcAttachPin(fPin, getChannel()); // re-attach the pin after frequency adjust
+#endif
+#else
+            ledcDetachPin(fPin);
+		// Remove the PWM during frequency adjust
+		_ledcSetupTimerFreq(getChannel(), freq, fResolutionBits);
+		writeScaled(dutyScaled);
+		ledcAttachPin(fPin, getChannel()); // re-attach the pin after frequency adjust
+#endif
+
+        } else {
+            _ledcSetupTimerFreq(getPin(), freq, fResolutionBits);
             writeScaled(dutyScaled);
         }
     }
@@ -552,31 +582,77 @@ private:
         }
 
         fResolutionBits = resolution_bits;
-        if (attached())
-        {
+        if (attached()) {
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+            ledcDetach(fPin);
+            DEBUG_PRINTF("Trying3 to attach pin %d freq %d res %d\n", fPin, freq, resolution_bits);
+            double val = ledcAttach(fPin, freq, resolution_bits);
+#else
             ledcDetachPin(fPin);
-            double val = ledcSetup(getChannel(), freq, resolution_bits);
+		double val = ledcSetup(getChannel(), freq, resolution_bits);
+#endif
+#else
+            ledcDetachPin(fPin);
+		double val = ledcSetup(getChannel(), freq, resolution_bits);
+#endif
+
             attachPin(fPin);
             return val;
         }
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+        DEBUG_PRINTF("Trying4 to attach pin %d freq %d res %d\n", getPin(), freq, resolution_bits);
+        return ledcAttach(getPin(), freq, resolution_bits);
+#else
         return ledcSetup(getChannel(), freq, resolution_bits);
+#endif
+#else
+        return ledcSetup(getChannel(), freq, resolution_bits);
+#endif
     }
 
-    void attachPin(uint8_t pin)
-    {
+    void attachPin(uint8_t pin) {
         if (!validPWM(pin))
         {
             DEBUG_PRINTLN("PWM pin not valid!");
             return;
         }
         attach(pin);
+        bool success=true;
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+        if(!attached()) {
+            DEBUG_PRINTF("Trying1 to attach pin %d freq %d res %d\n", pin, readFreq(), fResolutionBits);
+            success = ledcAttach(pin, readFreq(), fResolutionBits);
+        }
+#else
         ledcAttachPin(pin, getChannel());
+#endif
+#else
+        ledcAttachPin(pin, getChannel());
+#endif
+        if(success)
+            return;
+        DEBUG_PRINTF("ERROR PWM channel failed to configure on! (pin %d)\n", pin);
+        return;
+
+#if defined(CONFIG_IDF_TARGET_ESP32S2)
+        DEBUG_PRINTF("ERROR PWM channel unavailable on pin requested! %d PWM available on: 1-21,26,33-42 (pin %d)\n",pin);
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+        DEBUG_PRINTF("ERROR PWM channel unavailable on pin requested! %d PWM available on: 1-21,35-45,47-48 (pin %d)\n",pin);
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+        DEBUG_PRINTF("ERROR PWM channel unavailable on pin requested! %d PWM available on: 1-10,18-21 (pin %d)\n",pin);
+#else
+        DEBUG_PRINTF("ERROR PWM channel unavailable on pin requested! %d PWM available on: 2,4,5,12-19,21-23,25-27,32-33 (pin %d)\n",pin);
+#endif
+
     }
 
     void deallocate()
     {
         if (fPWMChannel < 0)
-           return;
+            return;
         auto priv = privates();
         if (--priv->timerCount[getTimer()] == 0)
         {
