@@ -269,7 +269,7 @@ ISR (TIMER5_COMPA_vect)
 class ServoDispatchESP32
 {
 private:
-    static constexpr unsigned kNumPWM = 16;
+    static constexpr unsigned kNumPWM = 15;
 
     /// \private
     class Private
@@ -295,14 +295,33 @@ public:
 
     virtual ~ServoDispatchESP32()
     {
-        if (attached())
+        if (attached()) {
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+
             ledcDetach(fPin);
+#else
+            ledcDetachPin(fPin);
+#endif
+#else
+            ledcDetachPin(fPin);
+#endif
+        }
         deallocate();
     }
 
     void detachPin(int pin)
     {
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+
         ledcDetach(pin);
+#else
+        ledcDetachPin(pin);
+#endif
+#else
+        ledcDetachPin(pin);
+#endif
         deallocate();
     }
 
@@ -476,7 +495,6 @@ private:
 
 #ifdef ESP_ARDUINO_VERSION_MAJOR
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
-        DEBUG_PRINTF("Trying0 to attach pin %d freq %d res %d\n", pin, freq, bit_num);
         return ledcAttach(pin, freq, bit_num);
 #else
         return ledcSetup(pin, freq, bit_num);
@@ -502,21 +520,20 @@ private:
             // Remove the PWM during frequency adjust
             _ledcSetupTimerFreq(fPin, freq, fResolutionBits);
             writeScaled(dutyScaled);
-            DEBUG_PRINTF("Trying2 to attach pin %d freq %d res %d\n", fPin, freq, fResolutionBits);
             ledcAttach(fPin, freq, fResolutionBits); // re-attach the pin after frequency adjust
 #else
             ledcDetachPin(fPin);
-		// Remove the PWM during frequency adjust
-		_ledcSetupTimerFreq(getChannel(), freq, fResolutionBits);
-		writeScaled(dutyScaled);
-		ledcAttachPin(fPin, getChannel()); // re-attach the pin after frequency adjust
+        // Remove the PWM during frequency adjust
+        _ledcSetupTimerFreq(getChannel(), freq, fResolutionBits);
+        writeScaled(dutyScaled);
+        ledcAttachPin(fPin, getChannel()); // re-attach the pin after frequency adjust
 #endif
 #else
             ledcDetachPin(fPin);
-		// Remove the PWM during frequency adjust
-		_ledcSetupTimerFreq(getChannel(), freq, fResolutionBits);
-		writeScaled(dutyScaled);
-		ledcAttachPin(fPin, getChannel()); // re-attach the pin after frequency adjust
+        // Remove the PWM during frequency adjust
+        _ledcSetupTimerFreq(getChannel(), freq, fResolutionBits);
+        writeScaled(dutyScaled);
+        ledcAttachPin(fPin, getChannel()); // re-attach the pin after frequency adjust
 #endif
 
         } else {
@@ -586,15 +603,14 @@ private:
 #ifdef ESP_ARDUINO_VERSION_MAJOR
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
             ledcDetach(fPin);
-            DEBUG_PRINTF("Trying3 to attach pin %d freq %d res %d\n", fPin, freq, resolution_bits);
             double val = ledcAttach(fPin, freq, resolution_bits);
 #else
             ledcDetachPin(fPin);
-		double val = ledcSetup(getChannel(), freq, resolution_bits);
+        double val = ledcSetup(getChannel(), freq, resolution_bits);
 #endif
 #else
             ledcDetachPin(fPin);
-		double val = ledcSetup(getChannel(), freq, resolution_bits);
+        double val = ledcSetup(getChannel(), freq, resolution_bits);
 #endif
 
             attachPin(fPin);
@@ -602,7 +618,6 @@ private:
         }
 #ifdef ESP_ARDUINO_VERSION_MAJOR
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
-        DEBUG_PRINTF("Trying4 to attach pin %d freq %d res %d\n", getPin(), freq, resolution_bits);
         return ledcAttach(getPin(), freq, resolution_bits);
 #else
         return ledcSetup(getChannel(), freq, resolution_bits);
@@ -622,10 +637,7 @@ private:
         bool success=true;
 #ifdef ESP_ARDUINO_VERSION_MAJOR
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
-        if(!attached()) {
-            DEBUG_PRINTF("Trying1 to attach pin %d freq %d res %d\n", pin, readFreq(), fResolutionBits);
-            success = ledcAttach(pin, readFreq(), fResolutionBits);
-        }
+        success = ledcAttach(pin, readFreq(), fResolutionBits);
 #else
         ledcAttachPin(pin, getChannel());
 #endif
